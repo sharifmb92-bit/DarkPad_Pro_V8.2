@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+    <title>Dark Pad Pro V8.2 - Full Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
+
+    <style>
+        [x-cloak] { display: none !important; }
+        body { background-color: #050a0f; color: #e2e8f0; font-family: system-ui, sans-serif; overflow: hidden; height: 100vh; transition: transform 0.2s; }
+        .bg-pure-black { background-color: #000000 !important; }
+        
+        /* Escalas de Interfaz */
+        .scale-small { transform: scale(0.9); transform-origin: top center; }
+        .scale-large { transform: scale(1.05); transform-origin: top center; }
+
+        .modal-container { width: 90%; max-width: 400px; max-height: 80vh; margin: auto; border-radius: 2.2rem; overflow: hidden; display: flex; flex-direction: column; background: #1c2833; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        
+        .bg-dark-gray { background-color: #1c2833 !important; }
+        .bg-dark-orange { background-color: #5d340b !important; }
+        .bg-dark-blue { background-color: #153e5a !important; }
+
+        .note-card { border-radius: 1.8rem; transition: all 0.2s; border: 1px solid rgba(255,255,255,0.05); }
+        .is-pinned { border: 2px solid #f97316 !important; }
+        
+        input[type="datetime-local"] { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 12px; border-radius: 15px; width: 100%; outline: none; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        
+        .has-data-dot { width: 4px; height: 4px; background: #f97316; border-radius: 50%; margin-top: 2px; }
+    </style>
+</head>
+<body x-data="notesApp()" x-init="init()" :class="[config.pureBlack ? 'bg-pure-black' : '', 'scale-' + config.uiScale]">
+
+    <header class="p-5 pb-2 sticky top-0 z-50 bg-inherit border-b border-white/5">
+        <div class="flex justify-between items-center mb-4">
+            <div>
+                <h1 class="text-xl font-black text-orange-500 italic uppercase">Dark Pad</h1>
+                <p class="text-[9px] font-black text-sky-500 uppercase tracking-widest">V8.2 Master Control</p>
+            </div>
+            <button @click="ui.showSettings = true" class="p-2 bg-white/5 rounded-full"><span class="material-symbols-outlined text-sky-400">settings</span></button>
+        </div>
+        
+        <div class="flex items-center justify-between bg-white/5 p-2 rounded-2xl border border-white/10">
+            <div class="flex items-center gap-1">
+                <button @click="ui.showSearch = !ui.showSearch" class="p-2"><span class="material-symbols-outlined text-sky-400 text-sm">search</span></button>
+                <input x-show="ui.showSearch" x-model="search" type="text" placeholder="Buscar..." class="w-20 bg-transparent outline-none text-xs text-white">
+            </div>
+            <div class="flex gap-2 pr-1">
+                <button @click="cambiarTamanoTexto()" class="p-1"><span class="material-symbols-outlined text-white/50 text-sm">format_size</span></button>
+                <button @click="ui.showFullCalendar = true" class="p-1"><span class="material-symbols-outlined text-sky-400 text-sm">calendar_month</span></button>
+                <button @click="resetFiltros()" class="p-1"><span class="material-symbols-outlined text-white/50 text-sm">restart_alt</span></button>
+            </div>
+        </div>
+    </header>
+
+    <section class="px-4 py-3 bg-white/5 overflow-x-auto whitespace-nowrap hide-scrollbar flex gap-2 border-b border-white/5">
+        <template x-for="day in recentDays" :key="day.dateStr">
+            <div @click="filterByDate(day.dateStr)" 
+                 class="flex flex-col items-center min-w-[50px] p-2.5 rounded-2xl transition-all"
+                 :class="selectedDate === day.dateStr ? 'bg-sky-500 text-white shadow-lg' : 'bg-white/5'">
+                <span class="text-[7px] uppercase font-black opacity-50" x-text="day.weekday"></span>
+                <span class="text-sm font-black" x-text="day.dayNum"></span>
+                <div x-show="day.hasNote" class="has-data-dot"></div>
+            </div>
+        </template>
+    </section>
+
+    <main class="p-4 grid grid-cols-2 gap-4 h-[calc(100vh-230px)] overflow-y-auto pb-32 hide-scrollbar">
+        <template x-for="nota in notasFiltradas" :key="nota.id">
+            <div @click="abrirNota(nota)" class="note-card p-5 h-44 flex flex-col justify-between" :class="[nota.estilo, nota.pinned ? 'is-pinned' : '']">
+                <div>
+                    <div class="flex justify-between items-start">
+                        <h4 class="text-[9px] font-black uppercase opacity-50 truncate w-3/4" x-text="nota.titulo || 'Nueva'"></h4>
+                        <span x-show="nota.type === 'checklist'" class="material-symbols-outlined text-[14px] text-sky-400">task_alt</span>
+                    </div>
+                    <p class="font-bold text-white/90 leading-tight mt-2 line-clamp-3" :style="{ fontSize: (config.fontSize-2)+'px' }" x-text="nota.type === 'checklist' ? 'Lista de tareas...' : nota.texto"></p>
+                </div>
+                <div class="flex justify-between items-center opacity-30 text-[8px] font-black uppercase">
+                    <span x-text="nota.fecha"></span>
+                    <span x-show="nota.reminderAt" class="material-symbols-outlined text-[12px] text-orange-400">alarm</span>
+                </div>
+            </div>
+        </template>
+    </main>
+
+    <div class="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-3">
+        <div x-show="ui.showFabMenu" x-transition x-cloak class="flex flex-col gap-2">
+            <button @click="nuevaNota('checklist')" class="flex items-center gap-2 bg-sky-600 text-white px-4 py-3 rounded-xl font-black text-[9px] uppercase shadow-2xl">Checklist <span class="material-symbols-outlined text-sm">rule</span></button>
+            <button @click="nuevaNota('note')" class="flex items-center gap-2 bg-orange-600 text-white px-4 py-3 rounded-xl font-black text-[9px] uppercase shadow-2xl">Nota <span class="material-symbols-outlined text-sm">edit_note</span></button>
+        </div>
+        <button @click="ui.showFabMenu = !ui.showFabMenu" class="w-16 h-16 bg-white text-black rounded-2xl flex items-center justify-center shadow-2xl" :class="ui.showFabMenu ? 'rotate-45 bg-red-500 text-white' : ''">
+            <span class="material-symbols-outlined text-4xl font-black">add</span>
+        </button>
+    </div>
+
+    <div x-show="notaExpandida" x-transition x-cloak class="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4 backdrop-blur-md">
+        <div class="modal-container" :class="notaExpandida?.estilo">
+            <div class="p-4 flex justify-between items-center bg-black/10">
+                <span class="text-[9px] font-black uppercase opacity-40" x-text="notaExpandida?.type"></span>
+                <button @click="cerrarNota()" class="w-8 h-8 bg-black/20 rounded-full flex items-center justify-center"><span class="material-symbols-outlined text-sm">close</span></button>
+            </div>
+            
+            <div class="px-5 pt-3"><input x-model="notaExpandida.titulo" placeholder="Título..." class="w-full bg-white/5 p-3 rounded-xl text-white font-bold outline-none border border-white/10"></div>
+            
+            <div class="flex-grow overflow-y-auto p-5">
+                <template x-if="notaExpandida?.type === 'note'">
+                    <textarea x-model="notaExpandida.texto" class="w-full h-full bg-transparent outline-none text-white resize-none" :style="{ fontSize: config.fontSize+'px' }"></textarea>
+                </template>
+                <template x-if="notaExpandida?.type === 'checklist'">
+                    <div class="space-y-2">
+                        <template x-for="(item, index) in notaExpandida.items">
+                            <div class="bg-white/5 p-3 rounded-xl flex items-center gap-3">
+                                <button @click="item.done = !item.done"><span class="material-symbols-outlined text-sky-400" x-text="item.done ? 'check_circle' : 'circle'"></span></button>
+                                <input x-model="item.text" class="bg-transparent outline-none flex-grow text-sm text-white">
+                                <button @click="notaExpandida.items.splice(index, 1)"><span class="material-symbols-outlined text-red-500 text-sm">delete</span></button>
+                            </div>
+                        </template>
+                        <button @click="notaExpandida.items.push({text: '', done: false})" class="w-full p-3 border border-dashed border-white/20 rounded-xl text-[10px] font-black uppercase opacity-50">+ Añadir Tarea</button>
+                    </div>
+                </template>
+            </div>
+
+            <div x-show="ui.showAlarmPanel" class="p-5 bg-black/40 border-t border-white/10">
+                <p class="text-[10px] font-black uppercase text-orange-500 mb-2">Fecha y Hora de Alarma:</p>
+                <input type="datetime-local" x-model="tempAlarm" class="mb-4">
+                <div class="flex gap-2">
+                    <button @click="setAlarm()" class="flex-grow bg-sky-600 p-3 rounded-xl font-black text-[10px] uppercase">Programar</button>
+                    <button @click="notaExpandida.reminderAt = null; ui.showAlarmPanel = false" class="bg-red-500/20 px-4 rounded-xl text-red-500"><span class="material-symbols-outlined">alarm_off</span></button>
+                </div>
+            </div>
+
+            <div class="p-5 flex justify-around border-t border-white/5 bg-black/20">
+                <button @click="ui.showAlarmPanel = !ui.showAlarmPanel" :class="notaExpandida?.reminderAt ? 'text-orange-500' : 'text-white/40'"><span class="material-symbols-outlined">alarm</span></button>
+                <button @click="togglePin()"><span class="material-symbols-outlined" :class="notaExpandida?.pinned ? 'text-sky-500' : 'text-white/40'">push_pin</span></button>
+                <button @click="borrarNotaRapido()" class="text-red-500/40"><span class="material-symbols-outlined">delete</span></button>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="ui.showFullCalendar" x-transition x-cloak class="fixed inset-0 bg-black/90 z-[300] flex items-center justify-center p-4">
+        <div class="bg-[#1c2833] w-full max-w-xs rounded-[2.5rem] p-6 border border-white/10 shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-black uppercase text-sky-400 italic">Historial</h2>
+                <button @click="ui.showFullCalendar = false" class="bg-white/10 p-2 rounded-full"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div class="grid grid-cols-7 gap-1 text-center text-[8px] font-black opacity-30 mb-2"><span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sa</span><span>Do</span></div>
+            <div class="grid grid-cols-7 gap-2">
+                <template x-for="day in fullMonthDays" :key="day.dateStr">
+                    <button @click="filterByDate(day.dateStr); ui.showFullCalendar = false" 
+                         class="aspect-square flex flex-col items-center justify-center rounded-xl text-[10px] font-bold"
+                         :class="selectedDate === day.dateStr ? 'bg-sky-500 text-white' : 'bg-white/5'">
+                        <span x-text="day.dayNum"></span>
+                        <div x-show="day.hasNote" class="has-data-dot"></div>
+                    </button>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <div x-show="ui.showSettings" x-transition x-cloak class="fixed inset-0 bg-[#050a0f] z-[500] p-8 overflow-y-auto">
+        <div class="flex justify-between items-center mb-10">
+            <h2 class="text-xl font-black italic uppercase">Configuración</h2>
+            <button @click="ui.showSettings = false" class="bg-sky-500 px-6 py-2 rounded-full text-[10px] font-black uppercase">Listo</button>
+        </div>
+
+        <div class="space-y-6">
+            <div class="bg-white/5 p-6 rounded-3xl border border-white/10">
+                <p class="text-[10px] font-black uppercase opacity-40 mb-4">Interfaz y Zoom</p>
+                <div class="flex gap-2">
+                    <button @click="config.uiScale = 'small'" class="flex-grow p-4 rounded-2xl text-[10px] font-black uppercase" :class="config.uiScale === 'small' ? 'bg-sky-600' : 'bg-white/5'">Pequeño</button>
+                    <button @click="config.uiScale = 'normal'" class="flex-grow p-4 rounded-2xl text-[10px] font-black uppercase" :class="config.uiScale === 'normal' ? 'bg-sky-600' : 'bg-white/5'">Normal</button>
+                    <button @click="config.uiScale = 'large'" class="flex-grow p-4 rounded-2xl text-[10px] font-black uppercase" :class="config.uiScale === 'large' ? 'bg-sky-600' : 'bg-white/5'">Grande</button>
+                </div>
+            </div>
+
+            <div class="bg-white/5 p-6 rounded-3xl border border-white/10">
+                <p class="text-[10px] font-black uppercase opacity-40 mb-4">Backup de Seguridad</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <button @click="exportData()" class="bg-green-600/20 p-4 rounded-2xl flex flex-col items-center gap-2 border border-green-500/20">
+                        <span class="material-symbols-outlined text-green-400">download</span>
+                        <span class="text-[8px] font-black uppercase">Exportar JSON</span>
+                    </button>
+                    <button @click="$refs.fileInput.click()" class="bg-orange-600/20 p-4 rounded-2xl flex flex-col items-center gap-2 border border-orange-500/20">
+                        <span class="material-symbols-outlined text-orange-400">upload</span>
+                        <span class="text-[8px] font-black uppercase">Restaurar</span>
+                    </button>
+                    <input type="file" x-ref="fileInput" class="hidden" @change="importData($event)">
+                </div>
+            </div>
+
+            <div class="bg-white/5 p-6 rounded-3xl border border-white/10 flex justify-between items-center">
+                <span class="font-bold text-sm">Modo Negro Puro (AMOLED)</span>
+                <button @click="config.pureBlack = !config.pureBlack; guardar()" class="w-12 h-6 rounded-full p-1 transition-colors" :class="config.pureBlack ? 'bg-sky-500' : 'bg-white/10'">
+                    <div class="w-4 h-4 bg-white rounded-full transition-transform" :class="config.pureBlack ? 'translate-x-6' : ''"></div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function notesApp() {
+            return {
+                notas: [], notaExpandida: null, search: '', selectedDate: null, tempAlarm: '',
+                ui: { showSearch: false, showSettings: false, showAlarmPanel: false, showFullCalendar: false, showFabMenu: false },
+                config: { fontSize: 18, uiScale: 'normal', pureBlack: false },
+                estilos: ['bg-dark-gray', 'bg-dark-orange', 'bg-dark-blue'],
+
+                init() {
+                    this.notas = JSON.parse(localStorage.getItem('darkpad_v8.2')) || [];
+                    this.config = JSON.parse(localStorage.getItem('darkpad_conf_v8')) || this.config;
+                    
+                    // Lógica de Alarma (Revisión cada 10 seg)
+                    setInterval(() => {
+                        const ahora = new Date().getTime();
+                        this.notas.forEach(n => {
+                            if (n.reminderAt && ahora >= new Date(n.reminderAt).getTime()) {
+                                // Vibración y Alerta
+                                if (window.navigator.vibrate) window.navigator.vibrate([200, 100, 200]);
+                                alert("⏰ ALARMA: " + (n.titulo || "Registro de Bus"));
+                                n.reminderAt = null; this.guardar();
+                            }
+                        });
+                    }, 10000);
+                },
+
+                get recentDays() {
+                    const days = [];
+                    for(let i=0; i < 14; i++) {
+                        const d = new Date(); d.setDate(d.getDate() - i);
+                        const dStr = d.toLocaleDateString('es-ES', {day:'2-digit', month:'2-digit'});
+                        days.push({ dateStr: dStr, dayNum: d.getDate(), weekday: d.toLocaleDateString('es-ES', {weekday: 'short'}), hasNote: this.notas.some(n => n.fecha.includes(dStr)) });
+                    }
+                    return days;
+                },
+
+                get fullMonthDays() {
+                    const days = []; const now = new Date();
+                    for(let i=34; i >= 0; i--) {
+                        const d = new Date(); d.setDate(now.getDate() - i);
+                        const dStr = d.toLocaleDateString('es-ES', {day:'2-digit', month:'2-digit'});
+                        days.push({ dateStr: dStr, dayNum: d.getDate(), hasNote: this.notas.some(n => n.fecha.includes(dStr)) });
+                    }
+                    return days;
+                },
+
+                get notasFiltradas() {
+                    return this.notas.filter(n => {
+                        const matchSearch = (n.texto + n.titulo).toLowerCase().includes(this.search.toLowerCase());
+                        const matchDate = !this.selectedDate || n.fecha.includes(this.selectedDate);
+                        return matchSearch && matchDate;
+                    }).sort((a,b) => b.pinned - a.pinned || b.id - a.id);
+                },
+
+                nuevaNota(tipo) {
+                    const n = { id: Date.now(), type: tipo, titulo: '', texto: '', items: tipo === 'checklist' ? [{text:'', done:false}] : [], fecha: new Date().toLocaleDateString('es-ES', {day:'2-digit', month:'2-digit'}), estilo: this.estilos[Math.floor(Math.random()*3)], pinned: false, reminderAt: null };
+                    this.notas.unshift(n); this.abrirNota(n); this.ui.showFabMenu = false;
+                },
+
+                abrirNota(n) { this.notaExpandida = n; this.tempAlarm = n.reminderAt || ''; this.ui.showAlarmPanel = false; },
+                cerrarNota() { this.guardar(); this.notaExpandida = null; },
+                guardar() { localStorage.setItem('darkpad_v8.2', JSON.stringify(this.notas)); localStorage.setItem('darkpad_conf_v8', JSON.stringify(this.config)); },
+                
+                setAlarm() { if(this.tempAlarm) { this.notaExpandida.reminderAt = this.tempAlarm; this.ui.showAlarmPanel = false; this.guardar(); alert("Alarma programada."); } },
+                filterByDate(date) { this.selectedDate = (this.selectedDate === date) ? null : date; },
+                resetFiltros() { this.selectedDate = null; this.search = ''; },
+                cambiarTamanoTexto() { const t = [14, 18, 22]; this.config.fontSize = t[(t.indexOf(this.config.fontSize) + 1) % t.length]; this.guardar(); },
+                togglePin() { this.notaExpandida.pinned = !this.notaExpandida.pinned; this.guardar(); },
+                borrarNotaRapido() { if(confirm("¿Eliminar?")) { this.notas = this.notas.filter(n => n.id !== this.notaExpandida.id); this.cerrarNota(); } },
+
+                exportData() {
+                    const data = JSON.stringify({ notas: this.notas, config: this.config });
+                    const blob = new Blob([data], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = 'backup_darkpad.json'; a.click();
+                },
+                importData(e) {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = (f) => {
+                        const parsed = JSON.parse(f.target.result);
+                        this.notas = parsed.notas; this.config = parsed.config;
+                        this.guardar(); location.reload();
+                    };
+                    reader.readAsText(file);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
